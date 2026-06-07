@@ -1,40 +1,41 @@
-# from ROOT
-# - Locate tcmalloc library
-# Defines:
+# - Find TCMalloc
 #
-#  TCMALLOC_FOUND
+# This module defines the following variables:
 #  TCMALLOC_INCLUDE_DIR
-#  TCMALLOC_INCLUDE_DIRS (not cached)
-#  TCMALLOC_LIBRARY_PATH
-#  TCMALLOC_tcmalloc_LIBRARY
-#  TCMALLOC_profiler_LIBRARY
-#  TCMALLOC_LIBRARIES (not cached)
+#  TCMALLOC_LIBRARY
+#  TCMALLOC_LIBRARIES
 #  TCMALLOC_LIBRARY_DIRS (not cached)
 #  PPROF_EXECUTABLE
 
-find_path(TCMALLOC_INCLUDE_DIR google/tcmalloc.h)
+find_path(TCMALLOC_INCLUDE_DIR NAMES gperftools/tcmalloc.h google/tcmalloc.h)
 foreach(component tcmalloc profiler)
   find_library(TCMALLOC_${component}_LIBRARY NAMES ${component})
   mark_as_advanced(TCMALLOC_${component}_LIBRARY)
 endforeach()
 
-find_program(PPROF_EXECUTABLE NAMES pprof
-             HINTS ${TCMALLOC_INCLUDE_DIR}/../bin)
-
-set(TCMALLOC_INCLUDE_DIRS ${TCMALLOC_INCLUDE_DIR})
-set(TCMALLOC_LIBRARIES ${TCMALLOC_tcmalloc_LIBRARY} ${TCMALLOC_profiler_LIBRARY})
-
-# handle the QUIETLY and REQUIRED arguments and set TCMALLOC_FOUND to TRUE if
-# all listed variables are TRUE
-INCLUDE(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(tcmalloc DEFAULT_MSG TCMALLOC_INCLUDE_DIR TCMALLOC_LIBRARIES)
-
-mark_as_advanced(TCMALLOC_FOUND TCMALLOC_INCLUDE_DIR PPROF_EXECUTABLE)
-
-if(TCMALLOC_tcmalloc_LIBRARY)
+if(TCMALLOC_INCLUDE_DIR AND TCMALLOC_tcmalloc_LIBRARY)
+  set(TCMALLOC_FOUND TRUE)
+  set(TCMALLOC_LIBRARIES ${TCMALLOC_tcmalloc_LIBRARY})
+  if(TCMALLOC_profiler_LIBRARY)
+    list(APPEND TCMALLOC_LIBRARIES ${TCMALLOC_profiler_LIBRARY})
+  endif()
   get_filename_component(TCMALLOC_LIBRARY_DIRS ${TCMALLOC_tcmalloc_LIBRARY} PATH)
-elseif(TCMALLOC_profiler_LIBRARY)
-  get_filename_component(TCMALLOC_LIBRARY_DIRS ${TCMALLOC_profiler_LIBRARY} PATH)
+else()
+  set(TCMALLOC_FOUND FALSE)
 endif()
 
-get_filename_component(TCMALLOC_LIBRARY_PATH ${TCMALLOC_tcmalloc_LIBRARY} PATH)
+if(TCMALLOC_FOUND)
+  if(NOT TCMALLOC_FIND_QUIETLY)
+    message(STATUS "Found TCMalloc: ${TCMALLOC_LIBRARIES}")
+  endif()
+else()
+  if(TCMALLOC_FIND_REQUIRED)
+    message(FATAL_ERROR "Could not find TCMalloc")
+  endif()
+endif()
+
+mark_as_advanced(TCMALLOC_INCLUDE_DIR TCMALLOC_LIBRARIES TCMALLOC_LIBRARY_DIRS)
+
+# Find pprof
+find_program(PPROF_EXECUTABLE pprof)
+mark_as_advanced(PPROF_EXECUTABLE)
