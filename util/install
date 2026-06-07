@@ -5,7 +5,99 @@
 set -e
 
 if [ -z ${BDM_INSTALL} ]; then
-  export BDM_INSTALL=v1.04-patches
+```cpp
+#include <cmath>
+#include <vector>
+#include <memory>
+#include <algorithm>
+#include <omp.h>
+
+namespace biodynamo {
+
+class Cell {
+public:
+    double concentration;
+    double volume;
+    double growth_rate;
+    
+    Cell() : concentration(0.0), volume(1.0), growth_rate(0.0) {}
+    
+    void UpdateConcentration(double dt) {
+        #pragma omp atomic
+        concentration += growth_rate * dt;
+    }
+    
+    void SetGrowthRate(double rate) {
+        growth_rate = rate;
+    }
+};
+
+class Environment {
+private:
+    std::vector<std::unique_ptr<Cell>> cells_;
+    double diffusion_coefficient_;
+    
+public:
+    Environment(double diff_coeff) : diffusion_coefficient_(diff_coeff) {}
+    
+    void AddCell(std::unique_ptr<Cell> cell) {
+        cells_.push_back(std::move(cell));
+    }
+    
+    void SimulateDiffusion(double dt) {
+        #pragma omp parallel for
+        for (size_t i = 0; i < cells_.size(); ++i) {
+            double local_concentration = cells_[i]->concentration;
+            double neighbor_avg = 0.0;
+            int neighbor_count = 0;
+            
+            for (size_t j = 0; j < cells_.size(); ++j) {
+                if (i != j) {
+                    neighbor_avg += cells_[j]->concentration;
+                    neighbor_count++;
+                }
+            }
+            
+            if (neighbor_count > 0) {
+                neighbor_avg /= neighbor_count;
+                double flux = diffusion_coefficient_ * (neighbor_avg - local_concentration);
+                #pragma omp atomic
+                cells_[i]->concentration += flux * dt;
+            }
+        }
+    }
+    
+    void RunSolver(double total_time, double dt) {
+        double current_time = 0.0;
+        while (current_time < total_time) {
+            double adaptive_dt = std::min(dt, total_time - current_time);
+            
+            #pragma omp parallel sections
+            {
+                #pragma omp section
+                {
+                    for (auto& cell : cells_) {
+                        cell->UpdateConcentration(adaptive_dt);
+                    }
+                }
+                
+                #pragma omp section
+                {
+                    SimulateDiffusion(adaptive_dt);
+                }
+            }
+            
+            current_time += adaptive_dt;
+        }
+    }
+    
+    const std::vector<std::unique_ptr<Cell>>& GetCells() const {
+        return cells_;
+    }
+};
+
+} // namespace biodynamo
+```
 fi
 echo "BDM_INSTALL is set to: $BDM_INSTALL"
 
