@@ -5,7 +5,111 @@
 set -e
 
 if [ -z ${BDM_INSTALL} ]; then
-  export BDM_INSTALL=v1.04-patches
+```cpp
+#include <cmath>
+#include <vector>
+#include <memory>
+#include <algorithm>
+#include <omp.h>
+
+namespace biodynamo {
+
+class Agent {
+public:
+    virtual ~Agent() = default;
+    virtual double GetMass() const = 0;
+    virtual void SetMass(double mass) = 0;
+    virtual const std::vector<double>& GetPosition() const = 0;
+    virtual void SetPosition(const std::vector<double>& pos) = 0;
+};
+
+class ForceCalculator {
+public:
+    virtual ~ForceCalculator() = default;
+    virtual std::vector<double> CalculateForce(const Agent& agent1, const Agent& agent2) const = 0;
+};
+
+class GravityForce : public ForceCalculator {
+private:
+    double gravitational_constant_;
+    
+public:
+    explicit GravityForce(double G) : gravitational_constant_(G) {}
+    
+    std::vector<double> CalculateForce(const Agent& agent1, const Agent& agent2) const override {
+        const auto& pos1 = agent1.GetPosition();
+        const auto& pos2 = agent2.GetPosition();
+        
+        if (pos1.size() != pos2.size()) {
+            return std::vector<double>(pos1.size(), 0.0);
+        }
+        
+        std::vector<double> force(pos1.size(), 0.0);
+        double distance_squared = 0.0;
+        
+        for (size_t i = 0; i < pos1.size(); ++i) {
+            double diff = pos2[i] - pos1[i];
+            distance_squared += diff * diff;
+        }
+        
+        if (distance_squared < 1e-10) {
+            return force;
+        }
+        
+        double distance = std::sqrt(distance_squared);
+        double force_magnitude = gravitational_constant_ * agent1.GetMass() * agent2.GetMass() / distance_squared;
+        
+        for (size_t i = 0; i < pos1.size(); ++i) {
+            force[i] = force_magnitude * (pos2[i] - pos1[i]) / distance;
+        }
+        
+        return force;
+    }
+};
+
+class Simulation {
+private:
+    std::vector<std::unique_ptr<Agent>> agents_;
+    std::unique_ptr<ForceCalculator> force_calculator_;
+    
+public:
+    explicit Simulation(std::unique_ptr<ForceCalculator> calculator)
+        : force_calculator_(std::move(calculator)) {}
+    
+    void AddAgent(std::unique_ptr<Agent> agent) {
+        agents_.push_back(std::move(agent));
+    }
+    
+    void ComputeForces(std::vector<std::vector<double>>& forces) const {
+        const size_t num_agents = agents_.size();
+        forces.assign(num_agents, std::vector<double>());
+        
+        #pragma omp parallel for schedule(dynamic)
+        for (size_t i = 0; i < num_agents; ++i) {
+            forces[i].resize(agents_[i]->GetPosition().size(), 0.0);
+            
+            for (size_t j = 0; j < num_agents; ++j) {
+                if (i == j) continue;
+                
+                auto force = force_calculator_->CalculateForce(*agents_[i], *agents_[j]);
+                
+                #pragma omp critical
+                {
+                    for (size_t k = 0; k < force.size(); ++k) {
+                        forces[i][k] += force[k];
+                    }
+                }
+            }
+        }
+    }
+    
+    void UpdatePositions(double dt) {
+        std::vector<std::vector<double>> forces;
+        ComputeForces(forces);
+        
+        #pragma omp parallel for
+        for (size_t i = 0; i < agents_.size(); ++i) {
+            auto pos = agents_[i]->GetPosition();
 fi
 echo "BDM_INSTALL is set to: $BDM_INSTALL"
 
